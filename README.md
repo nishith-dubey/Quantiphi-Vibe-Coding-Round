@@ -17,8 +17,11 @@ React frontend -> Express/Node backend -> MongoDB
 - View the count of renewals within the next 7 days.
 - See all subscriptions in a table.
 - Pause and resume subscriptions.
+- Delete a subscription with confirmation.
 - Show paused subscriptions in grey.
 - Keep subscription data after page refresh.
+- Show loading, API error, and empty states.
+- Validate required form fields and positive costs.
 
 ## 3. Tech Stack
 
@@ -54,7 +57,7 @@ package.json
 
 ## 5. How the Application Works
 
-The React frontend loads subscriptions from the Express API and displays the table and summary metrics. New subscriptions and status changes are sent to the backend with Axios. The backend validates and stores subscription documents in MongoDB through Mongoose.
+The React frontend loads subscriptions from the Express API and displays the table and summary metrics. New subscriptions, status changes, and deletions are sent to the backend with Axios. The backend validates and stores subscription documents in MongoDB through Mongoose. The frontend shows loading and error feedback while requests are in progress or fail.
 
 ## 6. API Endpoints
 
@@ -71,7 +74,7 @@ The React frontend loads subscriptions from the Express API and displays the tab
 The `Subscription` model contains:
 
 - `serviceName`: required string
-- `cost`: required number, minimum `0`
+- `cost`: required number, minimum `0` in the schema; the form requires a value greater than `0`
 - `billingCycle`: `Monthly` or `Yearly`
 - `nextRenewalDate`: required date string
 - `active`: boolean, defaulting to `true`
@@ -143,3 +146,5 @@ If `VITE_API_URL` is not set, the frontend uses that URL by default.
 5. Pause a subscription and confirm the row turns grey and Monthly Burn decreases.
 6. Resume it and confirm the cost returns.
 7. Refresh the page and confirm the subscriptions and statuses persist.
+8. Try submitting missing or invalid values and confirm validation prevents submission.
+9. Delete a test subscription and confirm the confirmation dialog and row removal.
