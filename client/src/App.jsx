@@ -11,6 +11,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [validationError, setValidationError] = useState('')
 
   useEffect(() => {
     axios.get(`${API_URL}/subscriptions`)
@@ -30,8 +31,14 @@ function App() {
 
   async function addSubscription(event) {
     event.preventDefault()
+    const renewalDate = new Date(`${form.nextRenewalDate}T00:00:00`)
+    if (!form.serviceName.trim()) return setValidationError('Service name is required.')
+    if (!form.cost || Number(form.cost) <= 0) return setValidationError('Cost must be greater than 0.')
+    if (!form.billingCycle) return setValidationError('Billing cycle is required.')
+    if (!form.nextRenewalDate || Number.isNaN(renewalDate.getTime())) return setValidationError('Enter a valid renewal date.')
     setSaving(true)
     setError('')
+    setValidationError('')
     try {
       const { data } = await axios.post(`${API_URL}/subscriptions`, { ...form, cost: Number(form.cost) })
       setSubscriptions((current) => [data, ...current])
@@ -40,6 +47,16 @@ function App() {
       setError('Subscription could not be added. Check the form and try again.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function deleteSubscription(subscription) {
+    if (!window.confirm(`Delete ${subscription.serviceName}?`)) return
+    try {
+      await axios.delete(`${API_URL}/subscriptions/${subscription._id}`)
+      setSubscriptions((current) => current.filter((item) => item._id !== subscription._id))
+    } catch {
+      setError('Subscription could not be deleted.')
     }
   }
 
@@ -57,7 +74,7 @@ function App() {
       <header className="topbar"><div className="brand-mark">ST</div><span>Subtrack</span><span className="topbar-note">Personal finance, made visible.</span></header>
       <div className="content">
         <section className="intro"><div><p className="eyebrow">{formatToday()}</p><h1>Your subscriptions,<br /><em>under control.</em></h1></div><div className="intro-copy">Know what is leaving your account, when it happens, and what can wait.</div></section>
-        {error && <div className="error-message">{error}</div>}
+        {(error || validationError) && <div className="error-message">{error || validationError}</div>}
         <section className="metrics" aria-label="Subscription summary">
           <Metric label="Monthly burn rate" value={`$${metrics.monthlyBurn.toFixed(2)}`} detail="Active subscriptions only" accent="lime" />
           <Metric label="Renewing soon" value={metrics.upcoming.toString().padStart(2, '0')} detail="Within the next 7 days" accent="orange" />
@@ -65,8 +82,8 @@ function App() {
         </section>
         <section className="workspace">
           <div className="section-heading"><div><p className="eyebrow">Your recurring spend</p><h2>All subscriptions</h2></div><span className="live-dot">Live overview</span></div>
-          {loading ? <p className="empty-state">Loading your subscriptions...</p> : subscriptions.length === 0 ? <p className="empty-state">Nothing here yet. Add your first subscription below.</p> : <div className="table-wrap"><table><thead><tr><th>Service</th><th>Cost</th><th>Cycle</th><th>Next renewal</th><th>Status</th><th aria-label="Toggle status" /></tr></thead><tbody>{subscriptions.map((subscription) => <SubscriptionRow key={subscription._id} subscription={subscription} onToggle={toggleSubscription} />)}</tbody></table></div>}
-          <div className="add-panel"><div><p className="eyebrow">New commitment</p><h2>Add a subscription</h2></div><form onSubmit={addSubscription}><label>Service name<input required value={form.serviceName} onChange={(event) => setForm({ ...form, serviceName: event.target.value })} placeholder="e.g. Figma" /></label><label>Cost<input required min="0" step="0.01" type="number" value={form.cost} onChange={(event) => setForm({ ...form, cost: event.target.value })} placeholder="0.00" /></label><label>Billing cycle<select value={form.billingCycle} onChange={(event) => setForm({ ...form, billingCycle: event.target.value })}><option>Monthly</option><option>Yearly</option></select></label><label>Next renewal<input required type="date" value={form.nextRenewalDate} onChange={(event) => setForm({ ...form, nextRenewalDate: event.target.value })} /></label><button disabled={saving} type="submit">{saving ? 'Adding...' : 'Add subscription'} <span>+</span></button></form></div>
+          {loading ? <p className="empty-state"><span className="spinner" />Loading your subscriptions...</p> : subscriptions.length === 0 ? <p className="empty-state">No subscriptions yet. Add your first subscription.</p> : <div className="table-wrap"><table><thead><tr><th>Service</th><th>Cost</th><th>Cycle</th><th>Next renewal</th><th>Status</th><th aria-label="Actions" /></tr></thead><tbody>{subscriptions.map((subscription) => <SubscriptionRow key={subscription._id} subscription={subscription} onToggle={toggleSubscription} onDelete={deleteSubscription} />)}</tbody></table></div>}
+          <div className="add-panel"><div><p className="eyebrow">New commitment</p><h2>Add a subscription</h2></div><form onSubmit={addSubscription}><label>Service name<input required value={form.serviceName} onChange={(event) => { setForm({ ...form, serviceName: event.target.value }); setValidationError('') }} placeholder="e.g. Figma" /></label><label>Cost<input required min="0.01" step="0.01" type="number" value={form.cost} onChange={(event) => { setForm({ ...form, cost: event.target.value }); setValidationError('') }} placeholder="0.00" /></label><label>Billing cycle<select required value={form.billingCycle} onChange={(event) => { setForm({ ...form, billingCycle: event.target.value }); setValidationError('') }}><option value="">Select cycle</option><option>Monthly</option><option>Yearly</option></select></label><label>Next renewal<input required type="date" value={form.nextRenewalDate} onChange={(event) => { setForm({ ...form, nextRenewalDate: event.target.value }); setValidationError('') }} /></label><button disabled={saving} type="submit">{saving ? 'Adding...' : 'Add subscription'} <span>+</span></button></form></div>
         </section>
       </div>
     </main>
@@ -74,7 +91,7 @@ function App() {
 }
 
 function Metric({ label, value, detail, accent }) { return <div className={`metric metric-${accent}`}><p>{label}</p><strong>{value}</strong><span>{detail}</span></div> }
-function SubscriptionRow({ subscription, onToggle }) { const soon = subscription.active && isRenewingSoon(subscription.nextRenewalDate); return <tr className={!subscription.active ? 'paused' : ''}><td><div className="service-name"><span className="service-icon">{subscription.serviceName.slice(0, 1).toUpperCase()}</span><strong>{subscription.serviceName}</strong></div></td><td className="cost">${Number(subscription.cost).toFixed(2)}</td><td>{subscription.billingCycle}</td><td><span>{formatDate(subscription.nextRenewalDate)}</span>{soon && <span className="renewal-badge">Renewing soon</span>}</td><td><span className={`status ${subscription.active ? 'status-active' : 'status-paused'}`}>{subscription.active ? 'Active' : 'Paused'}</span></td><td><button className={`toggle ${subscription.active ? 'on' : ''}`} aria-label={`Set ${subscription.serviceName} ${subscription.active ? 'paused' : 'active'}`} onClick={() => onToggle(subscription)}><span /></button></td></tr> }
+function SubscriptionRow({ subscription, onToggle, onDelete }) { const soon = subscription.active && isRenewingSoon(subscription.nextRenewalDate); return <tr className={!subscription.active ? 'paused' : ''}><td><div className="service-name"><span className="service-icon">{subscription.serviceName.slice(0, 1).toUpperCase()}</span><strong>{subscription.serviceName}</strong></div></td><td className="cost">${Number(subscription.cost).toFixed(2)}</td><td>{subscription.billingCycle}</td><td><span>{formatDate(subscription.nextRenewalDate)}</span>{soon && <span className="renewal-badge">Renewing soon</span>}</td><td><span className={`status ${subscription.active ? 'status-active' : 'status-paused'}`}>{subscription.active ? 'Active' : 'Paused'}</span></td><td className="row-actions"><button className={`toggle ${subscription.active ? 'on' : ''}`} aria-label={`Set ${subscription.serviceName} ${subscription.active ? 'paused' : 'active'}`} onClick={() => onToggle(subscription)}><span /></button><button className="delete-button" aria-label={`Delete ${subscription.serviceName}`} onClick={() => onDelete(subscription)}>Delete</button></td></tr> }
 function daysUntil(date) { return Math.ceil((new Date(`${date}T00:00:00`) - new Date(new Date().toDateString())) / 86400000) }
 function isRenewingSoon(date) { const days = daysUntil(date); return days >= 0 && days <= 7 }
 function formatToday() { return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) }
